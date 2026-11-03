@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#f6eddd" />
+    <meta
+      name="description"
+      content="A hands-on 3D laboratory for reinforcement learning, world models, and Dyna-Q. Built for Himanshu Pathak."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Semi+Condensed:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <title>DYNA — Interactive World Model Learning Lab</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script type="module">
+      const path = window.location.pathname.replace(/\/+$/, '');
+      if (path === '/lab') import('/src/main.js');
+      else import('/src/home.js');
+    </script>
+  </body>
+</html>
