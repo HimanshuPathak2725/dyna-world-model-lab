@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 560" role="img" aria-labelledby="nia-title nia-desc">
+  <title id="nia-title">Nia, the DYNA research guide</title>
+  <desc id="nia-desc">An original editorial vector illustration of a young woman with shoulder-length dark hair and warm brown skin, wearing an ivory research jacket over navy clothing and holding a scientific tablet.</desc>
+  <defs>
+    <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#c98b65"/>
+      <stop offset=".48" stop-color="#b97855"/>
+      <stop offset="1" stop-color="#8b4f39"/>
+    </linearGradient>
+    <linearGradient id="skinLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d49b73"/>
+      <stop offset="1" stop-color="#a96545"/>
+    </linearGradient>
+    <linearGradient id="skinShade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#a96545"/>
+      <stop offset="1" stop-color="#75402f"/>
+    </linearGradient>
+    <linearGradient id="hair" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111722"/>
+      <stop offset=".5" stop-color="#242733"/>
+      <stop offset="1" stop-color="#3b3d49"/>
+    </linearGradient>
+    <linearGradient id="hairLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3b3d49"/>
+      <stop offset="1" stop-color="#171b26"/>
+    </linearGradient>
+    <linearGradient id="jacket" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f7f1e5"/>
+      <stop offset=".52" stop-color="#e8ddca"/>
+      <stop offset="1" stop-color="#cbbba3"/>
+    </linearGradient>
+    <linearGradient id="jacketShadow" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#d6c7b1"/>
+      <stop offset="1" stop-color="#ac9a80"/>
+    </linearGradient>
+    <linearGradient id="navy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#24304a"/>
+      <stop offset="1" stop-color="#11182b"/>
+    </linearGradient>
+    <linearGradient id="tablet" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2b364f"/>
+      <stop offset="1" stop-color="#11182b"/>
+    </linearGradient>
+    <radialGradient id="cheek" cx=".35" cy=".35" r=".75">
+      <stop offset="0" stop-color="#dca17b" stop-opacity=".55"/>
+      <stop offset="1" stop-color="#a96545" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="215" cy="532" rx="102" ry="13" fill="#18213d" opacity=".08" filter="url(#softShadow)"/>
+
+  <!-- back hair -->
+  <path d="M140 98C151 54 181 34 219 38c42 4 66 30 70 69 5 51-4 112-21 147-8 16-19 24-29 30l-13-45c11-38 14-76 4-105-9-28-28-42-49-40-33 3-46 38-43 81 2 32-4 62-17 82-16-19-24-49-20-82 3-28 24-61 39-82Z" fill="url(#hair)"/>
+
+  <!-- neck and ears -->
+  <path d="M177 235c4 18 5 37 2 55l-8 36 79 3-10-38c-7-16-7-33-3-51l-60-5Z" fill="url(#skinShade)"/>
+  <path d="M148 161c-13-5-23 4-20 19 2 13 12 25 24 24l8-16-12-27Zm120 0c13-5 23 4 20 19-2 13-12 25-24 24l-8-16 12-27Z" fill="url(#skin)"/>
+  <path d="M142 169c5-5 10-3 12 3m108-3c-5-5-10-3-12 3" fill="none" stroke="#75402f" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+
+  <!-- face -->
+  <path d="M153 113c14-28 73-34 99-7 17 18 20 49 14 79-5 29-17 59-38 72-18 12-41 7-56-8-17-17-28-47-28-76 0-23 2-43 9-60Z" fill="url(#skin)"/>
+  <path d="M155 115c13-26 64-34 91-14 13 10 19 28 19 49 0 33-13 66-31 80 15-12 22-39 22-65 0 26-10 57-28 75-18 15-40 9-55-8-15-17-26-49-26-76 0-16 2-30 8-41Z" fill="url(#skinLight)" opacity=".64"/>
+  <path d="M161 160c11-10 24-12 35-5m32 0c11-7 24-6 34 3" fill="none" stroke="#292432" stroke-width="5" stroke-linecap="round"/>
+  <path d="M164 175c7-6 18-6 25 0m43 0c7-6 18-6 25 0" fill="none" stroke="#f2e9dc" stroke-width="4" stroke-linecap="round"/>
+  <path d="M167 175c5-3 13-3 18 0m50 0c5-3 13-3 18 0" fill="none" stroke="#26324d" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="176" cy="175" r="2.5" fill="#101722"/>
+  <circle cx="244" cy="175" r="2.5" fill="#101722"/>
+  <circle cx="177" cy="174" r=".8" fill="#fff"/>
+  <circle cx="245" cy="174" r=".8" fill="#fff"/>
+  <path d="M207 179c-1 10-4 18-2 22 2 3 6 4 10 2" fill="none" stroke="#7c4432" stroke-width="3" stroke-linecap="round"/>
+  <path d="M184 214c11 8 26 9 38 1" fill="none" stroke="#71382e" stroke-width="4" stroke-linecap="round"/>
+  <path d="M190 214c8 3 17 3 25 0" fill="none" stroke="#f3e8d9" stroke-width="2" stroke-linecap="round" opacity=".85"/>
+  <ellipse cx="180" cy="191" rx="24" ry="18" fill="url(#cheek)" opacity=".65"/>
+  <ellipse cx="237" cy="191" rx="24" ry="18" fill="url(#cheek)" opacity=".5"/>
+
+  <!-- fringe and hair texture -->
+  <path d="M144 130c4-37 26-67 61-72 27-4 51 11 57 36-17-17-40-23-57-16-20 8-29 30-33 52-3 17-11 29-20 34-5-10-9-22-8-34Z" fill="url(#hairLight)"/>
+  <path d="M150 111c8-24 28-43 49-45m-34 70c7-17 20-30 36-36m-43 75c6-13 14-23 25-29m58-34c13 15 17 36 13 58m-96 31c-3 14-9 26-17 34" fill="none" stroke="#4a4b58" stroke-width="4" stroke-linecap="round" opacity=".45"/>
+  <path d="M151 111c8-24 28-43 49-45m-34 70c7-17 20-30 36-36" fill="none" stroke="#161a26" stroke-width="3" stroke-linecap="round" opacity=".65"/>
+
+  <!-- torso and jacket -->
+  <path d="M146 281c16-12 31-18 52-19l55 1c20 1 35 7 47 19 12 12 21 32 26 58l25 146-31 44H120l-20-46 12-143c3-29 14-46 34-60Z" fill="url(#jacket)"/>
+  <path d="M177 280 211 364 243 280c-21-4-45-4-66 0Z" fill="url(#navy)"/>
+  <path d="m177 280-33 66 33 164 38 2-4-148-34-84Zm66 0 33 66-31 164-34 2 4-148 32-84Z" fill="url(#jacketShadow)" opacity=".72"/>
+  <path d="m177 280-33 66 33 164 38 2-4-148-34-84Zm66 0 33 66-31 164-34 2 4-148 32-84Z" fill="url(#jacket)"/>
+  <path d="m177 280 34 84-4 146 8 2 4-146-34-84Z" fill="#f4ebdc" opacity=".7"/>
+  <path d="m243 280-34 84 4 146-8 2-4-146 34-84Z" fill="#c1ae94" opacity=".55"/>
+  <path d="m207 366 4 144" stroke="#a8947b" stroke-width="3" opacity=".55"/>
+  <path d="M130 388c14 16 26 23 43 29m-39 32c12 7 24 11 36 13m78-69c-8 20-9 42-7 64m-62-107c10 16 17 25 29 34" fill="none" stroke="#ad9b81" stroke-width="4" stroke-linecap="round" opacity=".45"/>
+  <path d="M232 328h29v43h-29z" fill="#e4d7c2"/>
+  <path d="M237 334h19v27h-19z" fill="#1aa3a1" opacity=".82"/>
+  <path d="M239 338h15v5h-15z" fill="#f6eddd" opacity=".8"/>
+  <path d="M239 347h15v3h-15zM239 353h15v3h-15z" fill="#f6eddd" opacity=".65"/>
+  <circle cx="207" cy="385" r="3" fill="#9b8a72"/>
+  <circle cx="207" cy="412" r="3" fill="#9b8a72"/>
+  <circle cx="207" cy="439" r="3" fill="#9b8a72"/>
+
+  <!-- left sleeve and hand holding tablet -->
+  <path d="M145 284c-17 2-28 12-37 29l-37 66c-6 12-3 25 8 31 12 7 25 2 33-9l44-69c7-20 7-36-11-48Z" fill="url(#jacket)"/>
+  <path d="M112 309c-6 12-17 29-26 46" fill="none" stroke="#ad9b81" stroke-width="5" stroke-linecap="round" opacity=".5"/>
+  <path d="M80 388c-7 10-3 24 9 28l16 4 14-17-9-21-30 6Z" fill="url(#skin)"/>
+  <path d="M89 391c4 6 10 9 17 8" fill="none" stroke="#7c4432" stroke-width="3" stroke-linecap="round"/>
+  <g transform="rotate(-13 116 372)">
+    <rect x="66" y="315" width="94" height="126" rx="10" fill="url(#tablet)"/>
+    <rect x="72" y="321" width="82" height="112" rx="6" fill="#24304a"/>
+    <path d="M82 340h52M82 350h40M82 360h48M82 380h32M82 390h44" stroke="#1aa3a1" stroke-width="4" stroke-linecap="round" opacity=".85"/>
+    <path d="M82 407h20M108 407h28" stroke="#f0a53a" stroke-width="4" stroke-linecap="round" opacity=".85"/>
+    <circle cx="137" cy="334" r="4" fill="#1aa3a1"/>
+  </g>
+  <path d="M104 405c-5 4-5 12 2 16l20 11c6 3 12 1 14-4l2-7-13-16-25 0Z" fill="url(#skinLight)"/>
+  <path d="M119 409c5 4 11 5 16 2" fill="none" stroke="#7c4432" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- right sleeve and relaxed gesturing hand -->
+  <path d="M276 285c16-2 30 5 42 19l32 42c8 10 9 22 1 31-8 9-20 9-30 2l-45-37c-11-24-11-43 0-57Z" fill="url(#jacket)"/>
+  <path d="M302 309c11 13 19 26 26 39" fill="none" stroke="#ad9b81" stroke-width="5" stroke-linecap="round" opacity=".5"/>
+  <path d="M345 333c7-3 15 1 18 8l7 18c2 6-1 12-7 14l-17 5-19-20 18-25Z" fill="url(#skin)"/>
+  <path d="M351 340c5 9 8 18 9 27m-24-23c5 7 9 12 14 16m-27-17c3 5 7 9 12 12" fill="none" stroke="#7c4432" stroke-width="3" stroke-linecap="round"/>
+  <path d="M348 365c6 4 12 5 18 2" fill="none" stroke="#7c4432" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- small jacket shadows and silhouette -->
+  <path d="M123 507c35 12 108 14 145-1" fill="none" stroke="#a8947b" stroke-width="4" stroke-linecap="round" opacity=".5"/>
+  <path d="M151 281c15-10 32-16 51-17m48 0c19 1 35 6 48 17" fill="none" stroke="#fff8ec" stroke-width="4" stroke-linecap="round" opacity=".65"/>
+</svg>
