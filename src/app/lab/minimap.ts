@@ -1,21 +1,47 @@
-function mixColor(from, to, amount) {
-  const a = from.match(/\w\w/g).map((value) => parseInt(value, 16));
-  const b = to.match(/\w\w/g).map((value) => parseInt(value, 16));
+import type { DynaGridworld } from '../../domain/rl/simulation.js';
+import type { StepEvent } from '../../domain/rl/types.js';
+
+interface MinimapCallbacks {
+  onSelect?: (state: number) => void;
+}
+
+function colorChannels(color: string): number[] {
+  const matches = color.match(/\w\w/g);
+  if (!matches) throw new TypeError(`Invalid color: ${color}`);
+  return matches.map((value) => parseInt(value, 16));
+}
+
+function mixColor(from: string, to: string, amount: number): string {
+  const a = colorChannels(from);
+  const b = colorChannels(to);
   return `rgb(${a.map((value, index) => Math.round(value + (b[index] - value) * amount)).join(',')})`;
 }
 
-function roundedRect(context, x, y, width, height, radius) {
+function roundedRect(context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number): void {
   context.beginPath();
   context.roundRect(x, y, width, height, radius);
 }
 
 export class Minimap {
-  constructor(canvas, simulation, callbacks = {}) {
+  readonly canvas: HTMLCanvasElement;
+  readonly context: CanvasRenderingContext2D;
+  simulation: DynaGridworld;
+  readonly callbacks: MinimapCallbacks;
+  selectedState: number | null = null;
+  trail: number[];
+  cell!: number;
+  boardWidth!: number;
+  boardHeight!: number;
+  offsetX!: number;
+  offsetY!: number;
+
+  constructor(canvas: HTMLCanvasElement, simulation: DynaGridworld, callbacks: MinimapCallbacks = {}) {
     this.canvas = canvas;
-    this.context = canvas.getContext('2d');
+    const context = canvas.getContext('2d');
+    if (!context) throw new Error('The minimap requires a 2D canvas context');
+    this.context = context;
     this.simulation = simulation;
     this.callbacks = callbacks;
-    this.selectedState = null;
     this.trail = [simulation.state];
     this.layout();
     canvas.addEventListener('pointerup', (event) => {
@@ -27,7 +53,7 @@ export class Minimap {
     });
   }
 
-  layout() {
+  layout(): void {
     const { width, height } = this.simulation;
     this.cell = Math.floor(Math.min((this.canvas.width - 40) / width, (this.canvas.height - 48) / height));
     this.boardWidth = this.cell * width;
@@ -36,7 +62,7 @@ export class Minimap {
     this.offsetY = Math.round((this.canvas.height - this.boardHeight) / 2);
   }
 
-  pick(event) {
+  pick(event: PointerEvent): number | null {
     const rect = this.canvas.getBoundingClientRect();
     const canvasX = (event.clientX - rect.left) * this.canvas.width / rect.width;
     const canvasY = (event.clientY - rect.top) * this.canvas.height / rect.height;
@@ -46,11 +72,11 @@ export class Minimap {
     return x + z * this.simulation.width;
   }
 
-  setSelected(state) {
+  setSelected(state: number | null): void {
     this.selectedState = state;
   }
 
-  handleEvent(event) {
+  handleEvent(event: StepEvent): void {
     if (event.done) this.trail = [event.stateAfter];
     else {
       this.trail.push(event.nextState);
@@ -58,19 +84,19 @@ export class Minimap {
     }
   }
 
-  resetSimulation() {
+  resetSimulation(): void {
     this.trail = [this.simulation.state];
     this.selectedState = null;
   }
 
-  center(state) {
+  center(state: number): { x: number; y: number } {
     return {
       x: this.offsetX + (state % this.simulation.width + 0.5) * this.cell,
       y: this.offsetY + (Math.floor(state / this.simulation.width) + 0.5) * this.cell,
     };
   }
 
-  draw(simulation = this.simulation) {
+  draw(simulation: DynaGridworld = this.simulation): void {
     this.simulation = simulation;
     const context = this.context;
     context.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -130,7 +156,7 @@ export class Minimap {
     context.strokeStyle = '#157f7d';
     context.stroke();
     context.beginPath();
-    context.arc(agent.x, agent.y, Math.max(2.5, this.cell * 0.08), 0, Math.PI * 2);
+    context.arc(agent.x, agent.y, Math.max(2, this.cell * 0.08), 0, Math.PI * 2);
     context.fillStyle = '#157f7d';
     context.fill();
   }

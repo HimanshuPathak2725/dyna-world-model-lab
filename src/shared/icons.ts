@@ -37,14 +37,14 @@ const paths = {
   copy: '<rect x="8" y="8" width="12" height="13" rx="2"/><path d="M15 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h3"/>',
 };
 
-export function icon(name, size = 20, className = '') {
+export function icon(name: keyof typeof paths, size = 20, className = '') {
   return `<svg class="icon ${className}" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.cube}</svg>`;
 }
 
 export const brandMark = `<svg viewBox="0 0 68 52" fill="none" aria-hidden="true"><path d="M8 7h17c14 0 23 7 23 19S39 45 25 45H8V7Z" stroke="currentColor" stroke-width="3.4"/><path d="M18 17h7c7 0 12 3 12 9s-5 9-12 9h-7V17Z" fill="currentColor"/><circle cx="54" cy="10" r="7" fill="#1aa3a1"/><circle cx="54" cy="10" r="11" stroke="#1aa3a1" stroke-opacity=".25"/></svg>`;
 
-export function lessonArt(id) {
-  const art = {
+export function lessonArt(id: string) {
+  const art: Record<string, string> = {
     interact: '<path d="M14 20h30v18H14zM52 12h30v18H52zM52 42h30v18H52zM90 24h20v20H90z" class="cells"/><path d="M28 52 43 29h24l28 8" class="path-real"/><circle cx="28" cy="52" r="5" class="agent"/><circle cx="99" cy="34" r="5" class="goal"/>',
     explore: '<path d="M20 56 46 40 72 48 98 22M46 40 48 17M72 48 91 62" class="path-real"/><path d="M20 56 36 66M46 40 70 18M72 48 105 51" class="path-model"/><circle cx="20" cy="56" r="5" class="agent"/><circle cx="48" cy="17" r="4" class="node"/><circle cx="98" cy="22" r="5" class="goal"/><circle cx="91" cy="62" r="4" class="node"/>',
     imagine: '<path d="M17 50h25l16-25h27" class="path-real"/><path d="M17 62h42c31 0 37-42 7-42H39" class="path-model"/><path d="m44 15-7 5 7 5" class="path-model"/><rect x="48" y="17" width="18" height="14" class="cells"/><circle cx="17" cy="50" r="5" class="agent"/><circle cx="90" cy="25" r="5" class="goal"/>',

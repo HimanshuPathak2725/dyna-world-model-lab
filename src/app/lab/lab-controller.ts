@@ -1,56 +1,62 @@
-import './style.css';
-import { ACTIONS, DEFAULT_PARAMS, DynaGridworld, runComparison } from './simulation.js';
+import './lab.css';
+import { ACTIONS, DEFAULT_PARAMS, DynaGridworld } from '../../domain/rl/simulation.js';
+import type { ComparisonOptions, ComparisonResults, ComparisonWorkerMessage, SimulationParams, StepEvent } from '../../domain/rl/types.js';
 import { WorldScene } from './scene.js';
 import { Minimap } from './minimap.js';
-import { icon, lessonArt } from './icons.js';
+import { icon, lessonArt } from '../../shared/icons.js';
 import { MISSIONS, QUIZ } from './content.js';
-import { renderLayout } from './layout.js';
+import type { FoundationTarget } from './content.js';
+import { renderLayout } from './lab-layout.js';
+import { DEFAULT_VIEW, loadProgress, saveProgress } from './progress-store.js';
+import type { ViewSettings } from './progress-store.js';
+import type { CameraPreset, ProjectedState } from './scene.js';
+import { FirstExperimentGuide } from './first-experiment.js';
+import { FoundationsGuide } from './foundations.js';
+import { StateGrid } from './state-grid.js';
 
-document.querySelector('#app').innerHTML = renderLayout();
+document.querySelector('#app')!.innerHTML = renderLayout();
 
-const $ = (selector) => document.querySelector(selector);
-const $$ = (selector) => [...document.querySelectorAll(selector)];
-const STORAGE_KEY = 'dyna-paper-lab-v1';
-const DEFAULT_VIEW = { values: true, policy: true, modelUpdates: true, minimap: true, hints: true };
-const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-function loadSaved() {
-  try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
-    return {
-      completed: Array.isArray(value.completed) ? value.completed : [],
-      quizBest: Number.isFinite(value.quizBest) ? value.quizBest : 0,
-      view: { ...DEFAULT_VIEW, ...(value.view || {}) },
-    };
-  } catch {
-    return { completed: [], quizBest: 0, view: { ...DEFAULT_VIEW } };
-  }
+function $<T extends Element = HTMLElement>(selector: string): T {
+  const element = document.querySelector<T>(selector);
+  if (!element) throw new Error(`Required element not found: ${selector}`);
+  return element;
 }
 
-const saved = loadSaved();
+const $$ = <T extends Element = HTMLElement>(selector: string): T[] => [...document.querySelectorAll<T>(selector)];
+const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+type InspectorTab = 'guide' | 'state' | 'model';
+type MonitorFilter = 'all' | 'real' | 'model';
+
+interface MonitorLog {
+  type: 'real' | 'model' | 'system';
+  text: string;
+}
+
+const saved = loadProgress();
 const appliedMissions = new Set(saved.completed.filter((id) => MISSIONS.some((mission) => mission.id === id)));
 let quizBest = Math.max(0, Math.min(QUIZ.length, saved.quizBest));
-let viewSettings = { ...DEFAULT_VIEW, ...saved.view };
+let viewSettings: ViewSettings = { ...saved.view };
 const simulation = new DynaGridworld();
 simulation.setParams({ planningSteps: 0 });
-let world;
-let minimap;
-let running = true;
+let world: WorldScene | undefined;
+let minimap: Minimap;
+let running = false;
 let speed = 2;
 let activeMission = 0;
-let activeTab = 'guide';
-let selectedState = null;
+let activeTab: InspectorTab = 'guide';
+let selectedState: number | null = null;
 let goalMode = false;
-let toastTimer;
+let toastTimer: ReturnType<typeof setTimeout> | undefined;
 let accumulator = 0;
 let previousTime = performance.now();
 let lastUiUpdate = 0;
 let quizIndex = 0;
 let quizScore = 0;
 let quizAnswered = false;
-let monitorFilter = 'all';
-let monitorLogs = [];
-let codeFlashTimer;
+let monitorFilter: MonitorFilter = 'all';
+let monitorLogs: MonitorLog[] = [];
+let codeFlashTimer: ReturnType<typeof setTimeout> | undefined;
 let resetProgressArmed = false;
 let lastReturnCount = -1;
 
@@ -64,25 +70,21 @@ try {
   console.error(error);
 }
 
-minimap = new Minimap($('#minimap-canvas'), simulation, { onSelect: handleStateSelect });
+minimap = new Minimap($<HTMLCanvasElement>('#minimap-canvas'), simulation, { onSelect: handleStateSelect });
 
-function savePreferences() {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      completed: [...appliedMissions],
-      quizBest,
-      view: viewSettings,
-    }));
-  } catch {
-    return;
-  }
+function savePreferences(): void {
+  saveProgress({
+    completed: [...appliedMissions],
+    quizBest,
+    view: viewSettings,
+  });
 }
 
-function setActiveNav(name) {
+function setActiveNav(name: string): void {
   $$('[data-nav-item]').forEach((item) => item.classList.toggle('is-on', item.dataset.navItem === name));
 }
 
-function renderLessons() {
+function renderLessons(): void {
   $('#lesson-list').innerHTML = MISSIONS.map((mission, index) => `
     <li><button class="lesson ${index === activeMission ? 'is-active' : ''} ${appliedMissions.has(mission.id) ? 'is-done' : ''}" data-mission="${index}" aria-current="${index === activeMission ? 'true' : 'false'}">
       <span class="lesson-done">${icon('check', 13)}</span>
@@ -97,14 +99,14 @@ function renderLessons() {
   updateLessonScroll();
 }
 
-function selectMission(index) {
+function selectMission(index: number): void {
   activeMission = (index + MISSIONS.length) % MISSIONS.length;
   renderLessons();
   renderGuide();
   switchTab('guide');
 }
 
-function renderGuide() {
+function renderGuide(): void {
   const mission = MISSIONS[activeMission];
   $('#mission-label').textContent = `${mission.number} / ${mission.label}`;
   $('#mission-title').textContent = mission.title;
@@ -114,7 +116,7 @@ function renderGuide() {
   $('#apply-mission').innerHTML = `${mission.action} ${icon('arrow', 16)}`;
 }
 
-function updateProgress() {
+function updateProgress(): void {
   const count = appliedMissions.size;
   $('#mission-progress').textContent = `${count}/${MISSIONS.length}`;
   $('#progress-fill').style.width = `${(count / MISSIONS.length) * 100}%`;
@@ -123,21 +125,22 @@ function updateProgress() {
   $('#settings-progress').innerHTML = `<div><span>Lessons complete</span><strong>${count} / ${MISSIONS.length}</strong></div><div><span>Best intuition score</span><strong>${quizBest} / ${QUIZ.length}</strong></div><div><span>Storage</span><strong>This browser</strong></div>`;
 }
 
-function switchTab(tab) {
+function switchTab(tab: InspectorTab): void {
   activeTab = tab;
   $$('[data-tab]').forEach((button) => {
     const active = button.dataset.tab === tab;
     button.classList.toggle('is-active', active);
     button.setAttribute('aria-selected', String(active));
   });
-  ['guide', 'state', 'model'].forEach((name) => {
+  const tabs: InspectorTab[] = ['guide', 'state', 'model'];
+  tabs.forEach((name) => {
     $(`#${name}-panel`).hidden = name !== tab;
   });
   if (tab === 'state') renderStateInspector();
   if (tab === 'model') renderModelInspector();
 }
 
-function applyMission() {
+function applyMission(): void {
   const mission = MISSIONS[activeMission];
   setParameters(mission.params);
   if (mission.id === 'mismatch') {
@@ -164,18 +167,19 @@ function applyMission() {
   toast(mission.toast);
 }
 
-function setParameters(params) {
+function setParameters(params: Partial<SimulationParams>): void {
   simulation.setParams(params);
   Object.entries(params).forEach(([key, value]) => {
-    const input = $(`#param-${key}`);
+    if (value === undefined) return;
+    const input = document.querySelector<HTMLInputElement>(`#param-${key}`);
     if (!input) return;
-    input.value = value;
+    input.value = String(value);
     updateRange(input);
   });
   updateEnvironmentLabel();
 }
 
-function updateRange(input) {
+function updateRange(input: HTMLInputElement): void {
   const value = Number(input.value);
   const progress = ((value - Number(input.min)) / (Number(input.max) - Number(input.min))) * 100;
   input.style.setProperty('--range-progress', `${progress}%`);
@@ -189,7 +193,7 @@ function updateEnvironmentLabel() {
   $('[data-code="plan"] span').innerHTML = `repeat <b>${count}</b>: Q.update(<strong>sample(M)</strong>)`;
 }
 
-function updatePlayButton() {
+function updatePlayButton(): void {
   const button = $('#play-toggle');
   button.innerHTML = icon(running ? 'pause' : 'play', 19);
   button.setAttribute('aria-label', running ? 'Pause training' : 'Start training');
@@ -198,9 +202,10 @@ function updatePlayButton() {
   $('#console-status').textContent = running ? 'Live' : 'Paused';
   $('#training-dot').classList.toggle('paused', !running);
   $('#environment-status').textContent = !running ? 'ENVIRONMENT PAUSED' : simulation.goalRevision > 0 ? 'WORLD CHANGED · LEARNING' : 'LIVE ENVIRONMENT';
+  $('#agent-policy-status').textContent = `ε-greedy policy · ${running ? 'running' : 'paused'}`;
 }
 
-function performStep() {
+function performStep(): StepEvent {
   const event = simulation.step();
   world?.handleEvent(event);
   minimap.handleEvent(event);
@@ -208,29 +213,33 @@ function performStep() {
   return event;
 }
 
-function stepOnce() {
+function stepOnce(): StepEvent {
   running = false;
-  performStep();
+  const event = performStep();
   updatePlayButton();
   updateUI(true);
+  firstExperiment.recordStep(event);
+  return event;
 }
 
-function resetLearning() {
+function resetLearning(): void {
   running = false;
   simulation.reset();
   selectedState = null;
   world?.setSelected(null);
   world?.resetSimulation();
   minimap.resetSimulation();
+  stateGrid.setSelected(null);
   setGoalMode(false);
   monitorLogs = [];
   addSystemLog('RESET fresh Q-values, model, and counters');
   updatePlayButton();
   updateUI(true);
+  firstExperiment.reset();
   toast('Fresh agent. Q-values, model, and counters reset.');
 }
 
-function setGoalMode(active) {
+function setGoalMode(active: boolean): void {
   goalMode = active;
   world?.setGoalMode(active);
   $('#goal-mode-banner').hidden = !active;
@@ -238,7 +247,7 @@ function setGoalMode(active) {
   $('#move-goal').setAttribute('aria-pressed', String(active));
 }
 
-function handleStateSelect(state) {
+function handleStateSelect(state: number): void {
   if (goalMode) {
     try {
       simulation.setGoal(state);
@@ -254,17 +263,18 @@ function handleStateSelect(state) {
       switchTab('model');
       toast('Goal relocated. Select a state to compare old model entries with reality.');
     } catch (error) {
-      toast(error.message, 'warning');
+      toast(error instanceof Error ? error.message : 'Unable to relocate the goal', 'warning');
     }
     return;
   }
   selectedState = state;
   world?.setSelected(state);
   minimap.setSelected(state);
+  stateGrid.setSelected(state);
   switchTab(activeTab === 'model' ? 'model' : 'state');
 }
 
-function handleStateHover(state, event) {
+function handleStateHover(state: number | null, event?: PointerEvent): void {
   const tooltip = $('#state-tooltip');
   if (state === null || !event || goalMode) {
     tooltip.hidden = true;
@@ -279,45 +289,49 @@ function handleStateHover(state, event) {
   tooltip.hidden = false;
 }
 
-function renderStateInspector() {
-  const empty = selectedState === null;
-  $('#state-empty').hidden = !empty;
-  $('#state-details').hidden = empty;
-  if (empty) return;
-  const info = simulation.getStateInfo(selectedState);
-  $('#selected-index').textContent = `STATE / ${String(selectedState).padStart(2, '0')}${info.isGoal ? ' · GOAL' : info.isObstacle ? ' · BLOCKED' : ''}`;
+function renderStateInspector(): void {
+  const state = selectedState;
+  $('#state-empty').hidden = state !== null;
+  $('#state-details').hidden = state === null;
+  if (state === null) return;
+  const info = simulation.getStateInfo(state);
+  $('#selected-index').textContent = `STATE / ${String(state).padStart(2, '0')}${info.isGoal ? ' · GOAL' : info.isObstacle ? ' · BLOCKED' : ''}`;
   $('#selected-title').textContent = `State ${info.x}, ${info.z}`;
   $('#selected-value').textContent = info.maxValue.toFixed(3);
   $('#q-grid').innerHTML = ACTIONS.map((action, index) => `
     <div class="q-value ${index === info.greedyAction && !info.isObstacle ? 'best' : ''}"><span><b>${['↑', '→', '↓', '←'][index]}</b> Q ${action.short}</span><strong>${info.values[index].toFixed(3)}</strong></div>`).join('');
   $('#selected-visits').textContent = info.visits.toLocaleString();
-  const modeled = ACTIONS.filter((_, action) => simulation.model.has(selectedState * 4 + action)).length;
+  const modeled = ACTIONS.filter((_, action) => simulation.model.has(state * 4 + action)).length;
   $('#selected-model').textContent = `${modeled} / 4`;
   $('#selected-action').textContent = info.isObstacle ? 'Blocked' : `${ACTIONS[info.greedyAction].name} ${['↑', '→', '↓', '←'][info.greedyAction]}`;
-  $('#inspect-model').disabled = info.isObstacle;
+  $<HTMLButtonElement>('#inspect-model').disabled = info.isObstacle;
 }
 
-function formatReward(value) {
+function formatReward(value: number): string {
   return value >= 0 ? `+${value.toFixed(2)}` : value.toFixed(2);
 }
 
-function renderModelInspector() {
-  const info = selectedState === null ? null : simulation.getStateInfo(selectedState);
-  const unavailable = !info || info.isObstacle;
-  $('#model-empty').hidden = !unavailable;
-  $('#model-details').hidden = unavailable;
-  if (unavailable) {
-    $('#model-empty').innerHTML = info?.isObstacle
-      ? `${icon('route', 29)}<p>This is a blocked state. Select a walkable tile so the agent can experience its actions.</p>`
-      : `${icon('route', 29)}<p>Select a walkable state in the 3D world or minimap to compare all four stored actions with the current environment.</p>`;
+function renderModelInspector(): void {
+  const state = selectedState;
+  $('#model-empty').hidden = state !== null;
+  $('#model-details').hidden = state === null;
+  if (state === null) {
+    $('#model-empty').innerHTML = `${icon('route', 29)}<p>Select a walkable state in the 3D world, minimap or keyboard grid to compare stored actions with the current environment.</p>`;
+    return;
+  }
+  const info = simulation.getStateInfo(state);
+  $('#model-empty').hidden = !info.isObstacle;
+  $('#model-details').hidden = info.isObstacle;
+  if (info.isObstacle) {
+    $('#model-empty').innerHTML = `${icon('route', 29)}<p>This is a blocked state. Select a walkable tile so the agent can experience its actions.</p>`;
     return;
   }
   let mismatches = 0;
   let modeled = 0;
-  $('#model-state-title').textContent = `State ${info.x}, ${info.z} / S${selectedState}`;
+  $('#model-state-title').textContent = `State ${info.x}, ${info.z} / S${state}`;
   $('#model-rows').innerHTML = ACTIONS.map((action, actionIndex) => {
-    const stored = simulation.model.get(selectedState * 4 + actionIndex);
-    const actual = simulation.transition(selectedState, actionIndex);
+    const stored = simulation.model.get(state * 4 + actionIndex);
+    const actual = simulation.transition(state, actionIndex);
     if (stored) modeled += 1;
     const mismatch = stored && (
       stored.nextState !== actual.nextState
@@ -333,7 +347,7 @@ function renderModelInspector() {
   $('#mismatch-count').classList.toggle('has-mismatch', mismatches > 0);
 }
 
-function positionCallout(element, point, offsetX, offsetY) {
+function positionCallout(element: HTMLElement, point: ProjectedState | null, offsetX: number, offsetY: number): void {
   if (!point?.visible) {
     element.classList.remove('is-ready');
     return;
@@ -365,6 +379,7 @@ function updateUI(force = false) {
   $('#coverage-fill').style.width = `${Math.min(100, (simulation.model.size / possible) * 100)}%`;
   if (activeTab === 'state') renderStateInspector();
   if (activeTab === 'model') renderModelInspector();
+  stateGrid.refresh();
   if (force || simulation.returns.length !== lastReturnCount) {
     lastReturnCount = simulation.returns.length;
     renderRewardChart();
@@ -384,10 +399,11 @@ function renderRewardChart() {
   const range = Math.max(max - min, 0.001);
   const points = values.map((value, index) => ({ x: (index / (values.length - 1)) * 340, y: 54 - ((value - min) / range) * 46 }));
   const line = points.map((point, index) => `${index ? 'L' : 'M'}${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
-  svg.innerHTML = `<defs><linearGradient id="return-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1aa3a1" stop-opacity=".24"/><stop offset="1" stop-color="#1aa3a1" stop-opacity="0"/></linearGradient></defs><path d="M0 54H340" stroke="#ded1bf"/><path d="${line} L340,60 L0,60 Z" fill="url(#return-fill)"/><path d="${line}" fill="none" stroke="#157f7d" stroke-width="1.8"/><circle cx="${points.at(-1).x}" cy="${points.at(-1).y}" r="3" fill="#157f7d"/><text x="2" y="9" fill="#696d74" font-size="8" font-family="JetBrains Mono, monospace">${max.toFixed(2)}</text>`;
+  const lastPoint = points.at(-1)!;
+  svg.innerHTML = `<defs><linearGradient id="return-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1aa3a1" stop-opacity=".24"/><stop offset="1" stop-color="#1aa3a1" stop-opacity="0"/></linearGradient></defs><path d="M0 54H340" stroke="#ded1bf"/><path d="${line} L340,60 L0,60 Z" fill="url(#return-fill)"/><path d="${line}" fill="none" stroke="#157f7d" stroke-width="1.8"/><circle cx="${lastPoint.x}" cy="${lastPoint.y}" r="3" fill="#157f7d"/><text x="2" y="9" fill="#696d74" font-size="8" font-family="JetBrains Mono, monospace">${max.toFixed(2)}</text>`;
 }
 
-function recordEvent(event) {
+function recordEvent(event: StepEvent): void {
   monitorLogs.push({
     type: 'real',
     text: `REAL S${event.state} ${ACTIONS[event.action].short} → S${event.nextState}  r ${formatReward(event.reward)}  δ ${event.delta.toFixed(3)}`,
@@ -405,13 +421,13 @@ function recordEvent(event) {
   flashCode(event);
 }
 
-function addSystemLog(text, render = true) {
+function addSystemLog(text: string, render = true): void {
   monitorLogs.push({ type: 'system', text: `DYNA ${text}` });
   if (monitorLogs.length > 60) monitorLogs.splice(0, monitorLogs.length - 60);
   if (render) renderMonitor();
 }
 
-function renderMonitor() {
+function renderMonitor(): void {
   const visible = monitorLogs.filter((log) => monitorFilter === 'all' || log.type === monitorFilter).slice(-7);
   $('#console-lines').innerHTML = visible.length
     ? visible.map((log) => `<div class="log-${log.type}">${log.text}</div>`).join('')
@@ -420,7 +436,7 @@ function renderMonitor() {
   lines.scrollTop = lines.scrollHeight;
 }
 
-function flashCode(event) {
+function flashCode(event: StepEvent): void {
   clearTimeout(codeFlashTimer);
   $$('.code-line').forEach((line) => line.classList.remove('is-active'));
   ['act', 'real', 'update', 'model'].forEach((name) => $(`[data-code="${name}"]`).classList.add('is-active'));
@@ -428,27 +444,35 @@ function flashCode(event) {
   codeFlashTimer = setTimeout(() => $$('.code-line').forEach((line) => line.classList.remove('is-active')), 170);
 }
 
-function applyViewSettings(persist = true) {
+function isViewSetting(key: string | undefined): key is keyof ViewSettings {
+  return key !== undefined && Object.hasOwn(DEFAULT_VIEW, key);
+}
+
+function applyViewSettings(persist = true): void {
   world?.setView(viewSettings);
   $('#minimap-panel').hidden = !viewSettings.minimap;
+  if (!viewSettings.minimap) stateGrid.setVisible(false, false);
   $('#view-hint').hidden = !viewSettings.hints;
-  ['values', 'policy', 'modelUpdates'].forEach((key) => {
+  const sceneKeys = ['values', 'policy', 'modelUpdates'] as const;
+  sceneKeys.forEach((key) => {
     const button = $(`[data-view-button="${key}"]`);
     button.classList.toggle('is-on', viewSettings[key]);
     button.setAttribute('aria-pressed', String(viewSettings[key]));
   });
   $('#minimap-toggle').classList.toggle('is-on', viewSettings.minimap);
   $('#minimap-toggle').setAttribute('aria-pressed', String(viewSettings.minimap));
-  $$('[data-setting]').forEach((input) => { input.checked = Boolean(viewSettings[input.dataset.setting]); });
+  $$<HTMLInputElement>('[data-setting]').forEach((input) => {
+    if (isViewSetting(input.dataset.setting)) input.checked = viewSettings[input.dataset.setting];
+  });
   if (persist) savePreferences();
 }
 
-function updateViewSetting(key, value) {
+function updateViewSetting(key: keyof ViewSettings, value: boolean): void {
   viewSettings = { ...viewSettings, [key]: value };
   applyViewSettings();
 }
 
-function toast(message, type = 'default') {
+function toast(message: string, type: 'default' | 'warning' = 'default'): void {
   clearTimeout(toastTimer);
   const element = $('#toast');
   element.textContent = message;
@@ -456,12 +480,16 @@ function toast(message, type = 'default') {
   toastTimer = setTimeout(() => element.classList.remove('show'), 3600);
 }
 
-function openDialog(id) {
+function openDialog(id: string): void {
+  if (id === 'foundations-dialog') {
+    foundations.open();
+    return;
+  }
   const dialog = document.getElementById(id);
-  if (!dialog) return;
+  if (!(dialog instanceof HTMLDialogElement)) return;
   if (id === 'comparison-dialog') {
     const planning = simulation.params.planningSteps || 12;
-    [...$('#comparison-planning').options].reduce((best, current) => (
+    [...$<HTMLSelectElement>('#comparison-planning').options].reduce((best, current) => (
       Math.abs(Number(current.value) - planning) < Math.abs(Number(best.value) - planning) ? current : best
     )).selected = true;
   }
@@ -470,24 +498,24 @@ function openDialog(id) {
   dialog.showModal();
 }
 
-function renderComparison(results) {
+function renderComparison(results: ComparisonResults): void {
   const margin = { left: 54, right: 28, top: 28, bottom: 46 };
   const plotWidth = 720 - margin.left - margin.right;
   const plotHeight = 320 - margin.top - margin.bottom;
-  const x = (step) => margin.left + (step / results.realBudget) * plotWidth;
-  const y = (value) => margin.top + (1 - value / 100) * plotHeight;
+  const x = (step: number): number => margin.left + (step / results.realBudget) * plotWidth;
+  const y = (value: number): number => margin.top + (1 - value / 100) * plotHeight;
   const colors = ['#26324d', '#c0652d'];
   const grid = [0, 25, 50, 75, 100].map((value) => `<line x1="${margin.left}" y1="${y(value)}" x2="692" y2="${y(value)}" stroke="#ded1bf" stroke-dasharray="3 6"/><text x="${margin.left - 12}" y="${y(value) + 4}" text-anchor="end" fill="#696d74" font-size="11" font-family="JetBrains Mono, monospace">${value}%</text>`).join('');
   const xLabels = results.checkpoints.map((step) => `<text x="${x(step)}" y="302" text-anchor="middle" fill="#696d74" font-size="10" font-family="JetBrains Mono, monospace">${step >= 1000 ? `${step / 1000}k` : step}</text>`).join('');
   const paths = results.series.map((series, index) => {
     const points = series.values.map((value, i) => `${i ? 'L' : 'M'}${x(results.checkpoints[i]).toFixed(1)},${y(value).toFixed(1)}`).join(' ');
-    return `<path d="${points}" fill="none" stroke="${colors[index]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(results.realBudget)}" cy="${y(series.values.at(-1))}" r="4.5" fill="${colors[index]}"/>`;
+    return `<path d="${points}" fill="none" stroke="${colors[index]}" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="${x(results.realBudget)}" cy="${y(series.values.at(-1)!)}" r="4.5" fill="${colors[index]}"/>`;
   }).join('');
   $('#comparison-chart').innerHTML = `${grid}${xLabels}<text x="${margin.left}" y="14" fill="#696d74" font-size="10" font-family="JetBrains Mono, monospace">GREEDY-POLICY SUCCESS</text><text x="360" y="318" text-anchor="middle" fill="#696d74" font-size="10" font-family="JetBrains Mono, monospace">REAL ENVIRONMENT STEPS</text>${paths}`;
-  const finalQ = results.series[0].values.at(-1);
-  const finalDyna = results.series[1].values.at(-1);
+  const finalQ = results.series[0].values.at(-1)!;
+  const finalDyna = results.series[1].values.at(-1)!;
   const delta = finalDyna - finalQ;
-  $('#comparison-summary').innerHTML = results.series.map((series, index) => `<div class="result-card"><span><i style="background:${colors[index]}"></i>${series.label}<small>N = ${series.planningSteps}</small></span><strong>${series.values.at(-1).toFixed(0)}<small>%</small></strong><p>final greedy success</p></div>`).join('') + `<div class="result-interpretation"><span class="panel-kicker">READ THE RESULT</span><p>${Math.abs(delta) < 0.01 ? 'The conditions finished at the same success rate in this run.' : `Dyna-Q finished <strong>${Math.abs(delta).toFixed(0)} percentage points ${delta > 0 ? 'higher' : 'lower'}</strong> at this budget.`} Change a parameter or seed count and run it again.</p></div>`;
+  $('#comparison-summary').innerHTML = results.series.map((series, index) => `<div class="result-card"><span><i style="background:${colors[index]}"></i>${series.label}<small>N = ${series.planningSteps}</small></span><strong>${series.values.at(-1)!.toFixed(0)}<small>%</small></strong><p>final greedy success</p></div>`).join('') + `<div class="result-interpretation"><span class="panel-kicker">READ THE RESULT</span><p>${Math.abs(delta) < 0.01 ? 'The conditions finished at the same success rate in this run.' : `Dyna-Q finished <strong>${Math.abs(delta).toFixed(0)} percentage points ${delta > 0 ? 'higher' : 'lower'}</strong> at this budget.`} Change a parameter or seed count and run it again.</p></div>`;
   $('#comparison-caveat').textContent = `${results.seeds} paired seeds · deterministic tabular gridworld · greedy evaluation stops on cycles or after 100 moves. This small controlled run is illustrative, not evidence of a general ranking.`;
   $('#comparison-results').hidden = false;
 }
@@ -522,13 +550,13 @@ function renderQuiz() {
   });
 }
 
-function answerQuiz(answer) {
+function answerQuiz(answer: number): void {
   if (quizAnswered) return;
   quizAnswered = true;
   const item = QUIZ[quizIndex];
   const correct = answer === item.answer;
   if (correct) quizScore += 1;
-  $$('[data-answer]').forEach((button) => {
+  $$<HTMLButtonElement>('[data-answer]').forEach((button) => {
     const index = Number(button.dataset.answer);
     button.disabled = true;
     if (index === item.answer) button.classList.add('correct');
@@ -542,13 +570,82 @@ function answerQuiz(answer) {
   $('#quiz-next').focus();
 }
 
-function updateLessonScroll() {
+function updateLessonScroll(): void {
   const list = $('#lesson-list');
-  $$('[data-lesson-scroll="prev"]').forEach((button) => { button.disabled = list.scrollLeft <= 2; });
-  $$('[data-lesson-scroll="next"]').forEach((button) => { button.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 2; });
+  $$<HTMLButtonElement>('[data-lesson-scroll="prev"]').forEach((button) => { button.disabled = list.scrollLeft <= 2; });
+  $$<HTMLButtonElement>('[data-lesson-scroll="next"]').forEach((button) => { button.disabled = list.scrollLeft + list.clientWidth >= list.scrollWidth - 2; });
 }
 
-$$('[data-tab]').forEach((button) => button.addEventListener('click', () => switchTab(button.dataset.tab)));
+function isInspectorTab(value: string | undefined): value is InspectorTab {
+  return value === 'guide' || value === 'state' || value === 'model';
+}
+
+function isCameraPreset(value: string | undefined): value is CameraPreset {
+  return value === 'iso' || value === 'top' || value === 'side';
+}
+
+function isParameterName(value: string | undefined): value is keyof SimulationParams {
+  return value === 'alpha' || value === 'gamma' || value === 'epsilon' || value === 'planningSteps' || value === 'maxStepsPerEpisode';
+}
+
+const firstExperiment = new FirstExperimentGuide({
+  step: stepOnce,
+  setPlanning: (steps) => setParameters({ planningSteps: steps }),
+  inspect: (state) => {
+    handleStateSelect(state);
+    switchTab('model');
+  },
+  openFoundations: () => openDialog('foundations-dialog'),
+  complete: () => $('#lessons').scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'start' }),
+  getQValue: (state, action) => simulation.q[state * 4 + action],
+  getCounts: () => ({
+    real: simulation.totalRealSteps,
+    model: simulation.totalModelSteps,
+    entries: simulation.model.size,
+  }),
+});
+
+const stateGrid = new StateGrid($('#state-grid'), simulation, {
+  panel: $('#keyboard-grid-panel'),
+  toggle: $<HTMLButtonElement>('#keyboard-grid-toggle'),
+  closeButton: $<HTMLButtonElement>('#keyboard-grid-close'),
+  onSelect: handleStateSelect,
+});
+
+const foundations = new FoundationsGuide((target: FoundationTarget) => {
+  if (target === 'state') {
+    handleStateSelect(simulation.state);
+    $('.info-card').scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
+  } else if (target === 'experiment') {
+    firstExperiment.show();
+  } else if (target === 'comparison') {
+    openDialog('comparison-dialog');
+  }
+});
+
+$('#show-first-experiment').addEventListener('click', () => firstExperiment.show());
+
+function executeComparison(options: ComparisonOptions): Promise<ComparisonResults> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('../../workers/comparison.worker.js', import.meta.url), { type: 'module' });
+    const cleanup = (): void => worker.terminate();
+    worker.onmessage = (event: MessageEvent<ComparisonWorkerMessage>) => {
+      if (event.data.type === 'result') resolve(event.data.results);
+      else reject(new Error(event.data.message));
+      cleanup();
+    };
+    worker.onerror = (event) => {
+      event.preventDefault();
+      reject(new Error(event.message));
+      cleanup();
+    };
+    worker.postMessage(options);
+  });
+}
+
+$$('[data-tab]').forEach((button) => button.addEventListener('click', () => {
+  if (isInspectorTab(button.dataset.tab)) switchTab(button.dataset.tab);
+}));
 $('#apply-mission').addEventListener('click', applyMission);
 $('#next-mission').addEventListener('click', () => selectMission(activeMission + 1));
 $('#inspect-model').addEventListener('click', () => switchTab('model'));
@@ -579,7 +676,9 @@ document.addEventListener('fullscreenchange', () => {
 });
 
 $$('[data-camera]').forEach((button) => button.addEventListener('click', () => {
-  world?.setCameraPreset(button.dataset.camera);
+  const preset = button.dataset.camera;
+  if (!isCameraPreset(preset)) return;
+  world?.setCameraPreset(preset);
   $$('[data-camera]').forEach((item) => {
     item.classList.toggle('is-active', item === button);
     item.setAttribute('aria-pressed', String(item === button));
@@ -594,10 +693,13 @@ $$('[data-speed]').forEach((button) => button.addEventListener('click', () => {
   });
 }));
 
-$$('[data-param]').forEach((input) => {
+$$<HTMLInputElement>('[data-param]').forEach((input) => {
   updateRange(input);
   input.addEventListener('input', () => {
-    simulation.setParams({ [input.dataset.param]: Number(input.value) });
+    const key = input.dataset.param;
+    if (!isParameterName(key)) return;
+    const patch: Partial<SimulationParams> = { [key]: Number(input.value) };
+    simulation.setParams(patch);
     updateRange(input);
     updateEnvironmentLabel();
   });
@@ -607,10 +709,13 @@ $('#reset-params').addEventListener('click', () => {
   toast('Default parameters restored. Learned Q-values and model were kept.');
 });
 $$('[data-view-button]').forEach((button) => button.addEventListener('click', () => {
-  updateViewSetting(button.dataset.viewButton, !viewSettings[button.dataset.viewButton]);
+  const key = button.dataset.viewButton;
+  if (isViewSetting(key)) updateViewSetting(key, !viewSettings[key]);
 }));
 $('#minimap-toggle').addEventListener('click', () => updateViewSetting('minimap', !viewSettings.minimap));
-$$('[data-setting]').forEach((input) => input.addEventListener('change', () => updateViewSetting(input.dataset.setting, input.checked)));
+$$<HTMLInputElement>('[data-setting]').forEach((input) => input.addEventListener('change', () => {
+  if (isViewSetting(input.dataset.setting)) updateViewSetting(input.dataset.setting, input.checked);
+}));
 $('#restore-visuals').addEventListener('click', () => {
   viewSettings = { ...DEFAULT_VIEW };
   applyViewSettings();
@@ -646,6 +751,7 @@ $('#side-toggle').addEventListener('click', () => {
 
 $$('[data-nav]').forEach((button) => button.addEventListener('click', () => {
   const nav = button.dataset.nav;
+  if (!nav) return;
   setActiveNav(nav);
   if (nav === 'lab') $('#stage-panel').scrollIntoView({ behavior: reducedMotion ? 'auto' : 'smooth', block: 'center' });
   if (nav === 'missions') {
@@ -658,14 +764,18 @@ $$('[data-nav]').forEach((button) => button.addEventListener('click', () => {
   if (window.innerWidth <= 700) $('#sidebar').classList.remove('is-open');
 }));
 
-$$('[data-open]').forEach((button) => button.addEventListener('click', () => openDialog(button.dataset.open)));
-$$('[data-close]').forEach((button) => button.addEventListener('click', () => button.closest('dialog').close()));
-$$('dialog').forEach((dialog) => dialog.addEventListener('click', (event) => {
+$$('[data-open]').forEach((button) => button.addEventListener('click', () => {
+  if (button.dataset.open) openDialog(button.dataset.open);
+}));
+$$('[data-close]').forEach((button) => button.addEventListener('click', () => button.closest('dialog')?.close()));
+$$<HTMLDialogElement>('dialog').forEach((dialog) => dialog.addEventListener('click', (event) => {
   if (event.target === dialog) dialog.close();
 }));
 
 $$('[data-monitor]').forEach((button) => button.addEventListener('click', () => {
-  monitorFilter = button.dataset.monitor;
+  const filter = button.dataset.monitor;
+  if (filter !== 'all' && filter !== 'real' && filter !== 'model') return;
+  monitorFilter = filter;
   $$('[data-monitor]').forEach((item) => {
     item.classList.toggle('active', item === button);
     item.setAttribute('aria-pressed', String(item === button));
@@ -690,16 +800,15 @@ $('#lesson-list').addEventListener('scroll', updateLessonScroll, { passive: true
 window.addEventListener('resize', updateLessonScroll);
 
 $('#run-comparison').addEventListener('click', async () => {
-  const button = $('#run-comparison');
+  const button = $<HTMLButtonElement>('#run-comparison');
   button.disabled = true;
   $('#comparison-results').hidden = true;
   $('#comparison-loading').hidden = false;
-  await new Promise((resolve) => setTimeout(resolve, 80));
   try {
-    const results = runComparison({
-      seeds: Number($('#comparison-seeds').value),
-      realBudget: Number($('#comparison-budget').value),
-      planningSteps: Number($('#comparison-planning').value),
+    const results = await executeComparison({
+      seeds: Number($<HTMLSelectElement>('#comparison-seeds').value),
+      realBudget: Number($<HTMLSelectElement>('#comparison-budget').value),
+      planningSteps: Number($<HTMLSelectElement>('#comparison-planning').value),
       params: {
         alpha: simulation.params.alpha,
         gamma: simulation.params.gamma,
@@ -718,7 +827,9 @@ $('#run-comparison').addEventListener('click', async () => {
 });
 
 document.addEventListener('keydown', (event) => {
-  if (event.target.matches('input, select, textarea') || $('dialog[open]')) return;
+  if (!(event.target instanceof Element)) return;
+  if (event.target.matches('input, select, textarea') || document.querySelector('dialog[open]')) return;
+  if (event.code === 'Space' && event.target.closest('button, a')) return;
   const key = event.key.toLowerCase();
   if (event.code === 'Space') {
     event.preventDefault();
@@ -745,7 +856,7 @@ document.addEventListener('visibilitychange', () => {
   previousTime = performance.now();
 });
 
-function frame(now) {
+function frame(now: number): void {
   const delta = Math.min((now - previousTime) / 1000, 0.1);
   previousTime = now;
   if (running && !document.hidden) {
@@ -776,8 +887,16 @@ updateEnvironmentLabel();
 applyViewSettings(false);
 updatePlayButton();
 updateUI(true);
+
+if (new URLSearchParams(window.location.search).get('guide') === 'foundations') foundations.open();
+if (window.location.hash === '#first-experiment') firstExperiment.show();
+if (window.location.hash === '#model-inspector') {
+  handleStateSelect(simulation.state);
+  switchTab('model');
+}
+
 requestAnimationFrame(frame);
 requestAnimationFrame(() => requestAnimationFrame(() => {
-  $('#loader').classList.add('is-done');
-  setTimeout(() => $('#loader')?.remove(), 500);
+  document.querySelector('#loader')?.classList.add('is-done');
+  setTimeout(() => document.querySelector('#loader')?.remove(), 500);
 }));

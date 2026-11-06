@@ -1,6 +1,65 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js';
+import type { DynaGridworld } from '../../domain/rl/simulation.js';
+import type { PlanningUpdate, StepEvent } from '../../domain/rl/types.js';
+
+interface SceneView {
+  values: boolean;
+  policy: boolean;
+  modelUpdates: boolean;
+}
+
+interface WorldSceneCallbacks {
+  onSelect?: (state: number) => void;
+  onHover?: (state: number | null, event?: PointerEvent) => void;
+}
+
+interface PlanningEffect {
+  line: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  life: number;
+  duration: number;
+  opacity: number;
+}
+
+interface RealPulse {
+  sprite: THREE.Sprite;
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  life: number;
+  duration: number;
+}
+
+interface SuccessEffect {
+  ring: THREE.Mesh<THREE.RingGeometry, THREE.MeshBasicMaterial>;
+  life: number;
+  duration: number;
+}
+
+interface CameraTween {
+  from: THREE.Vector3;
+  to: THREE.Vector3;
+  targetFrom: THREE.Vector3;
+  targetTo: THREE.Vector3;
+  start: number;
+  duration: number;
+}
+
+export interface ProjectedState {
+  x: number;
+  y: number;
+  visible: boolean;
+}
+
+export type CameraPreset = 'iso' | 'top' | 'side';
+type TileMesh = THREE.Mesh<THREE.BufferGeometry, THREE.MeshStandardMaterial>;
+type ArrowMesh = THREE.Mesh<THREE.ShapeGeometry, THREE.MeshBasicMaterial>;
+
+function getCanvasContext(canvas: HTMLCanvasElement): CanvasRenderingContext2D {
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('A 2D canvas context is required');
+  return context;
+}
 
 const REAL_COLOR = new THREE.Color('#1aa3a1');
 const MODEL_COLOR = new THREE.Color('#c0652d');
@@ -21,7 +80,7 @@ function makeRadialTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 128;
   canvas.height = 128;
-  const context = canvas.getContext('2d');
+  const context = getCanvasContext(canvas);
   const gradient = context.createRadialGradient(64, 64, 0, 64, 64, 64);
   gradient.addColorStop(0, 'rgba(255,255,255,1)');
   gradient.addColorStop(0.2, 'rgba(255,255,255,.7)');
@@ -36,7 +95,7 @@ function makePaperTexture() {
   const canvas = document.createElement('canvas');
   canvas.width = 256;
   canvas.height = 256;
-  const context = canvas.getContext('2d');
+  const context = getCanvasContext(canvas);
   const image = context.createImageData(256, 256);
   let seed = 41;
   const random = () => {
@@ -69,11 +128,11 @@ function makePaperTexture() {
   return texture;
 }
 
-function makeLabel(text, color = '#18213d') {
+function makeLabel(text: string, color = '#18213d') {
   const canvas = document.createElement('canvas');
   canvas.width = 512;
   canvas.height = 128;
-  const context = canvas.getContext('2d');
+  const context = getCanvasContext(canvas);
   context.beginPath();
   context.moveTo(62, 24);
   context.lineTo(450, 24);
@@ -126,7 +185,49 @@ function arrowGeometry() {
 }
 
 export class WorldScene {
-  constructor(container, simulation, callbacks = {}) {
+  readonly container: HTMLElement;
+  simulation: DynaGridworld;
+  readonly callbacks: WorldSceneCallbacks;
+  readonly scene: THREE.Scene;
+  readonly clock: THREE.Clock;
+  elapsed: number;
+  tiles: TileMesh[];
+  policyArrows: ArrowMesh[];
+  pickables: THREE.Object3D[];
+  planningEffects: PlanningEffect[];
+  realPulses: RealPulse[];
+  successEffects: SuccessEffect[];
+  trailStates: number[];
+  selectedState: number | null;
+  hoveredState: number | null;
+  agentReturnAt: { at: number; state: number } | null;
+  view: SceneView;
+  readonly reducedMotion: boolean;
+  readonly radialTexture: THREE.CanvasTexture;
+  readonly paperTexture: THREE.CanvasTexture;
+  readonly renderer: THREE.WebGLRenderer;
+  readonly camera: THREE.PerspectiveCamera;
+  cameraPreset: CameraPreset;
+  readonly controls: OrbitControls;
+  readonly resizeObserver: ResizeObserver;
+  dust!: THREE.Points;
+  startMarker!: THREE.Group;
+  selection!: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  hoverSelection!: THREE.LineSegments<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  agent!: THREE.Group;
+  agentShell!: THREE.Mesh<THREE.IcosahedronGeometry, THREE.MeshBasicMaterial>;
+  agentRing!: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
+  agentTarget!: THREE.Vector3;
+  goal!: THREE.Group;
+  goalCore!: THREE.Mesh<THREE.OctahedronGeometry, THREE.MeshStandardMaterial>;
+  goalRing!: THREE.Mesh<THREE.TorusGeometry, THREE.MeshBasicMaterial>;
+  modelGroup!: THREE.Group;
+  realGroup!: THREE.Group;
+  trail!: THREE.Line<THREE.BufferGeometry, THREE.LineBasicMaterial>;
+  cameraTween: CameraTween | null = null;
+  goalMode = false;
+
+  constructor(container: HTMLElement, simulation: DynaGridworld, callbacks: WorldSceneCallbacks = {}) {
     this.container = container;
     this.simulation = simulation;
     this.callbacks = callbacks;
@@ -593,7 +694,7 @@ export class WorldScene {
     this.realGroup.add(this.trail);
   }
 
-  statePosition(state) {
+  statePosition(state: number): THREE.Vector3 {
     const x = state % this.simulation.width;
     const z = Math.floor(state / this.simulation.width);
     return new THREE.Vector3(
@@ -603,7 +704,7 @@ export class WorldScene {
     );
   }
 
-  projectState(state, height = 0.7) {
+  projectState(state: number, height = 0.7): ProjectedState {
     const point = this.statePosition(state);
     point.y = this.tiles[state].position.y + height;
     point.project(this.camera);
@@ -614,7 +715,7 @@ export class WorldScene {
     };
   }
 
-  sync(simulation = this.simulation) {
+  sync(simulation: DynaGridworld = this.simulation): void {
     this.simulation = simulation;
     this.tiles.forEach((tile, state) => {
       const info = simulation.getStateInfo(state);
@@ -647,7 +748,7 @@ export class WorldScene {
     if (this.selectedState !== null) this.positionOutline(this.selection, this.selectedState);
   }
 
-  setView(view) {
+  setView(view: Partial<SceneView>): void {
     this.view = { ...this.view, ...view };
     this.modelGroup.visible = this.view.modelUpdates;
     this.policyArrows.forEach((arrow, state) => {
@@ -656,7 +757,7 @@ export class WorldScene {
     this.sync();
   }
 
-  handleEvent(event) {
+  handleEvent(event: StepEvent): void {
     const next = this.statePosition(event.nextState);
     const tile = this.tiles[event.nextState];
     next.y = tile.position.y + 0.72;
@@ -687,7 +788,7 @@ export class WorldScene {
     this.updateTrail();
   }
 
-  addRealPulse(fromState, toState) {
+  addRealPulse(fromState: number, toState: number): void {
     if (fromState === toState) return;
     const from = this.statePosition(fromState);
     const to = this.statePosition(toState);
@@ -709,7 +810,7 @@ export class WorldScene {
     if (this.realPulses.length > 20) this.removePulse(this.realPulses.shift());
   }
 
-  addModelLink(update) {
+  addModelLink(update: PlanningUpdate): void {
     const from = this.statePosition(update.state);
     const to = this.statePosition(update.nextState);
     from.y = this.tiles[update.state].position.y + 0.3;
@@ -737,7 +838,7 @@ export class WorldScene {
     if (this.planningEffects.length > 42) this.removeModelLink(this.planningEffects.shift());
   }
 
-  addSuccessEffect(state) {
+  addSuccessEffect(state: number): void {
     const ring = new THREE.Mesh(
       new THREE.RingGeometry(0.35, 0.39, 48),
       new THREE.MeshBasicMaterial({
@@ -766,18 +867,20 @@ export class WorldScene {
     this.trail.geometry = new THREE.BufferGeometry().setFromPoints(points);
   }
 
-  removePulse(effect) {
+  removePulse(effect: RealPulse | undefined): void {
+    if (!effect) return;
     this.realGroup.remove(effect.sprite);
     effect.sprite.material.dispose();
   }
 
-  removeModelLink(effect) {
+  removeModelLink(effect: PlanningEffect | undefined): void {
+    if (!effect) return;
     this.modelGroup.remove(effect.line);
     effect.line.geometry.dispose();
     effect.line.material.dispose();
   }
 
-  resetSimulation() {
+  resetSimulation(): void {
     const position = this.statePosition(this.simulation.state);
     position.y = this.tiles[this.simulation.state].position.y + 0.72;
     this.agent.position.copy(position);
@@ -798,23 +901,23 @@ export class WorldScene {
     this.sync();
   }
 
-  setSelected(state) {
+  setSelected(state: number | null): void {
     this.selectedState = state;
-    this.selection.visible = state !== null && state !== undefined;
-    if (this.selection.visible) this.positionOutline(this.selection, state);
+    this.selection.visible = state !== null;
+    if (state !== null) this.positionOutline(this.selection, state);
   }
 
-  positionOutline(outline, state) {
+  positionOutline(outline: THREE.Object3D, state: number): void {
     const position = this.statePosition(state);
     outline.position.set(position.x, this.tiles[state].position.y + 0.16, position.z);
   }
 
-  setGoalMode(active) {
+  setGoalMode(active: boolean): void {
     this.goalMode = active;
     this.renderer.domElement.style.cursor = active ? 'crosshair' : 'grab';
   }
 
-  setCameraPreset(preset) {
+  setCameraPreset(preset: CameraPreset): boolean {
     if (!Object.prototype.hasOwnProperty.call(CAMERA_PRESETS, preset)) return false;
     const config = CAMERA_PRESETS[preset];
 
@@ -840,7 +943,7 @@ export class WorldScene {
     return true;
   }
 
-  nudgeCamera(key) {
+  nudgeCamera(key: string): boolean {
     if (typeof key !== 'string') return false;
     const normalizedKey = key.toLowerCase();
     if (normalizedKey.length !== 1 || !'wasdqe'.includes(normalizedKey)) return false;
@@ -889,20 +992,20 @@ export class WorldScene {
     this.setCameraPreset('iso');
   }
 
-  bindPicking() {
+  bindPicking(): void {
     const canvas = this.renderer.domElement;
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    let down = null;
+    let down: { x: number; y: number } | null = null;
 
-    const pick = (event) => {
+    const pick = (event: PointerEvent): number | null => {
       const rect = canvas.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, this.camera);
       const intersections = raycaster.intersectObjects(this.pickables, true);
       if (!intersections.length) return null;
-      let object = intersections[0].object;
+      let object: THREE.Object3D | null = intersections[0].object;
       while (object && object.userData.state === undefined) object = object.parent;
       return object?.userData.state ?? null;
     };

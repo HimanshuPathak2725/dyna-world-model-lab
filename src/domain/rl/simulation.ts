@@ -1,15 +1,31 @@
+import type {
+  Action,
+  EpisodeEndReason,
+  EpisodeRecord,
+  GridworldOptions,
+  ParameterName,
+  PlanningUpdate,
+  PolicyEvaluation,
+  ResetOptions,
+  SimulationParams,
+  StateInfo,
+  StepEvent,
+  StoredTransition,
+  Transition,
+} from './types.js';
+
 export const GRID_WIDTH = 9;
 export const GRID_HEIGHT = 7;
 export const STATE_COUNT = GRID_WIDTH * GRID_HEIGHT;
 
-export const ACTIONS = Object.freeze([
+export const ACTIONS: readonly Action[] = Object.freeze([
   Object.freeze({ name: 'North', short: 'N', dx: 0, dz: -1 }),
   Object.freeze({ name: 'East', short: 'E', dx: 1, dz: 0 }),
   Object.freeze({ name: 'South', short: 'S', dx: 0, dz: 1 }),
   Object.freeze({ name: 'West', short: 'W', dx: -1, dz: 0 }),
 ]);
 
-export const DEFAULT_PARAMS = Object.freeze({
+export const DEFAULT_PARAMS: Readonly<SimulationParams> = Object.freeze({
   alpha: 0.18,
   gamma: 0.95,
   epsilon: 0.14,
@@ -17,7 +33,7 @@ export const DEFAULT_PARAMS = Object.freeze({
   maxStepsPerEpisode: 160,
 });
 
-export const DEFAULT_OBSTACLES = Object.freeze([
+export const DEFAULT_OBSTACLES: readonly number[] = Object.freeze([
   4, 13, 22, 31, 40,
   24, 33, 42, 51, 60,
 ]);
@@ -27,7 +43,7 @@ export const GOAL_STATE = 7 + GRID_WIDTH;
 export const STEP_COST = -0.04;
 
 const ACTION_COUNT = ACTIONS.length;
-const PARAMETER_NAMES = new Set([
+const PARAMETER_NAMES: ReadonlySet<ParameterName> = new Set([
   'alpha',
   'gamma',
   'epsilon',
@@ -35,11 +51,11 @@ const PARAMETER_NAMES = new Set([
   'maxStepsPerEpisode',
 ]);
 
-function clamp(value, minimum, maximum) {
+function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
 }
 
-function normalizeParameter(name, value) {
+export function normalizeParameter(name: ParameterName, value: number): number {
   if (!Number.isFinite(value)) {
     throw new TypeError(`${name} must be a finite number`);
   }
@@ -55,31 +71,53 @@ function normalizeParameter(name, value) {
       return Math.round(clamp(value, 0, 50));
     case 'maxStepsPerEpisode':
       return Math.max(10, Math.round(value));
-    default:
-      throw new RangeError(`Unknown parameter: ${name}`);
   }
 }
 
-function normalizeSeed(seed) {
+export function normalizeSeed(seed: number): number {
   if (!Number.isFinite(seed)) {
     throw new TypeError('seed must be a finite number');
   }
   return Math.trunc(seed) >>> 0;
 }
 
-function assertState(state, width, height, label = 'state') {
+function assertState(state: number, width: number, height: number, label = 'state'): void {
   if (!Number.isInteger(state) || state < 0 || state >= width * height) {
     throw new RangeError(`${label} must be an integer within the grid`);
   }
 }
 
-function assertNonnegativeInteger(value, name) {
+export function assertNonnegativeInteger(value: number, name: string): void {
   if (!Number.isInteger(value) || value < 0) {
     throw new RangeError(`${name} must be a nonnegative integer`);
   }
 }
 
 export class DynaGridworld {
+  readonly width: number;
+  readonly height: number;
+  readonly stateCount: number;
+  readonly obstacleSet: Set<number>;
+  readonly startState: number;
+  goalState: number;
+  params: SimulationParams;
+  q!: Float32Array;
+  model!: Map<number, StoredTransition>;
+  modelKeys!: number[];
+  visits!: Uint32Array;
+  state!: number;
+  episode!: number;
+  episodeReturn!: number;
+  episodeSteps!: number;
+  returns!: EpisodeRecord[];
+  totalRealSteps!: number;
+  totalModelSteps!: number;
+  totalSuccesses!: number;
+  goalRevision!: number;
+  seed!: number;
+  private _originalGoal: number;
+  private _rngState!: number;
+
   constructor({
     seed = 7,
     width = GRID_WIDTH,
@@ -88,7 +126,7 @@ export class DynaGridworld {
     start = START_STATE,
     goal = GOAL_STATE,
     maxStepsPerEpisode = 160,
-  } = {}) {
+  }: GridworldOptions = {}) {
     if (!Number.isInteger(width) || width <= 0 || !Number.isInteger(height) || height <= 0) {
       throw new RangeError('width and height must be positive integers');
     }
@@ -120,7 +158,7 @@ export class DynaGridworld {
     this.reset({ seed, preserveGoal: true });
   }
 
-  reset({ seed = this.seed, preserveGoal = false } = {}) {
+  reset({ seed = this.seed, preserveGoal = false }: ResetOptions = {}): this {
     this.seed = normalizeSeed(seed);
     this._rngState = this.seed;
     this.goalState = preserveGoal ? this.goalState : this._originalGoal;
@@ -143,20 +181,23 @@ export class DynaGridworld {
     return this;
   }
 
-  setParams(patch = {}) {
+  setParams(patch: Partial<SimulationParams> = {}): SimulationParams {
     if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) {
       throw new TypeError('params patch must be an object');
     }
 
-    for (const [name, value] of Object.entries(patch)) {
-      if (PARAMETER_NAMES.has(name)) {
-        this.params[name] = normalizeParameter(name, value);
-      }
+    for (const name of PARAMETER_NAMES) {
+      const value = patch[name];
+      if (value !== undefined) this.setParameter(name, value);
     }
     return this.params;
   }
 
-  transition(state, action) {
+  private setParameter<K extends ParameterName>(name: K, value: number): void {
+    this.params[name] = normalizeParameter(name, value);
+  }
+
+  transition(state: number, action: number): Transition {
     assertState(state, this.width, this.height);
     if (!Number.isInteger(action) || action < 0 || action >= ACTION_COUNT) {
       throw new RangeError('action must be an integer from 0 to 3');
@@ -184,7 +225,7 @@ export class DynaGridworld {
     };
   }
 
-  _random() {
+  private _random(): number {
     this._rngState = (this._rngState + 0x6d2b79f5) >>> 0;
     let value = this._rngState;
     value = Math.imul(value ^ (value >>> 15), value | 1);
@@ -192,7 +233,7 @@ export class DynaGridworld {
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
   }
 
-  _greedyAction(state, randomizeTies = false) {
+  private _greedyAction(state: number, randomizeTies = false): number {
     const offset = state * ACTION_COUNT;
     let bestValue = -Infinity;
     let bestAction = 0;
@@ -215,14 +256,14 @@ export class DynaGridworld {
     return bestAction;
   }
 
-  _chooseAction(state) {
+  private _chooseAction(state: number): number {
     if (this._random() < this.params.epsilon) {
       return Math.floor(this._random() * ACTION_COUNT);
     }
     return this._greedyAction(state, true);
   }
 
-  _maxQ(state) {
+  private _maxQ(state: number): number {
     const offset = state * ACTION_COUNT;
     let maximum = this.q[offset];
     for (let action = 1; action < ACTION_COUNT; action += 1) {
@@ -231,7 +272,7 @@ export class DynaGridworld {
     return maximum;
   }
 
-  _updateQ(state, action, nextState, reward, terminal) {
+  private _updateQ(state: number, action: number, nextState: number, reward: number, terminal: boolean): number {
     const index = state * ACTION_COUNT + action;
     const previous = this.q[index];
     const target = terminal
@@ -241,7 +282,7 @@ export class DynaGridworld {
     return this.q[index] - previous;
   }
 
-  step() {
+  step(): StepEvent {
     const state = this.state;
     const action = this._chooseAction(state);
     const { nextState, reward, terminal } = this.transition(state, action);
@@ -260,12 +301,12 @@ export class DynaGridworld {
     this.state = nextState;
 
     const done = terminal || this.episodeSteps >= this.params.maxStepsPerEpisode;
-    const reason = terminal ? 'goal' : done ? 'limit' : null;
-    const planning = [];
+    const reason: EpisodeEndReason = terminal ? 'goal' : done ? 'limit' : null;
+    const planning: PlanningUpdate[] = [];
 
     for (let index = 0; index < this.params.planningSteps; index += 1) {
       const modelKey = this.modelKeys[Math.floor(this._random() * this.modelKeys.length)];
-      const sample = this.model.get(modelKey);
+      const sample = this.model.get(modelKey)!;
       const planningDelta = this._updateQ(
         sample.state,
         sample.action,
@@ -325,7 +366,7 @@ export class DynaGridworld {
     };
   }
 
-  setGoal(state) {
+  setGoal(state: number): { oldGoal: number; newGoal: number } {
     assertState(state, this.width, this.height, 'goal');
     if (!this.obstacleSet.has(state) && state !== this.startState) {
       const oldGoal = this.goalState;
@@ -343,7 +384,7 @@ export class DynaGridworld {
     throw new RangeError('goal must be walkable');
   }
 
-  shiftGoal() {
+  shiftGoal(): { oldGoal: number; newGoal: number } {
     const coordinates = [
       [this.width - 2, 1],
       [this.width - 2, this.height - 2],
@@ -353,9 +394,9 @@ export class DynaGridworld {
       [this.width - 2, Math.floor(this.height / 2)],
       [1, this.height - 2],
     ];
-    const candidates = [];
+    const candidates: number[] = [];
 
-    const addCandidate = (state) => {
+    const addCandidate = (state: number): void => {
       if (
         state >= 0
         && state < this.stateCount
@@ -391,7 +432,7 @@ export class DynaGridworld {
     throw new Error('No alternative walkable goal is available');
   }
 
-  getStateInfo(state) {
+  getStateInfo(state: number): StateInfo {
     assertState(state, this.width, this.height);
     const offset = state * ACTION_COUNT;
     const values = Array.from(this.q.subarray(offset, offset + ACTION_COUNT));
@@ -413,7 +454,7 @@ export class DynaGridworld {
     };
   }
 
-  evaluatePolicy(maxSteps = 100) {
+  evaluatePolicy(maxSteps = 100): PolicyEvaluation {
     assertNonnegativeInteger(maxSteps, 'maxSteps');
     let current = this.startState;
     let steps = 0;
@@ -438,70 +479,4 @@ export class DynaGridworld {
 
     return { success: false, steps, path };
   }
-}
-
-export function runComparison({
-  seed = 11,
-  seeds = 12,
-  realBudget = 3000,
-  planningSteps = 12,
-  checkpointEvery = 250,
-  params = {},
-} = {}) {
-  normalizeSeed(seed);
-  if (!Number.isInteger(seeds) || seeds <= 0) {
-    throw new RangeError('seeds must be a positive integer');
-  }
-  assertNonnegativeInteger(realBudget, 'realBudget');
-  if (!Number.isInteger(checkpointEvery) || checkpointEvery <= 0) {
-    throw new RangeError('checkpointEvery must be a positive integer');
-  }
-  if (params === null || typeof params !== 'object' || Array.isArray(params)) {
-    throw new TypeError('params must be an object');
-  }
-  const dynaPlanningSteps = normalizeParameter('planningSteps', planningSteps);
-
-  const checkpoints = [0];
-  for (let step = checkpointEvery; step < realBudget; step += checkpointEvery) {
-    checkpoints.push(step);
-  }
-  if (checkpoints[checkpoints.length - 1] !== realBudget) {
-    checkpoints.push(realBudget);
-  }
-
-  const runSeries = (id, label, seriesPlanningSteps) => {
-    const successes = new Array(checkpoints.length).fill(0);
-
-    for (let seedIndex = 0; seedIndex < seeds; seedIndex += 1) {
-      const agent = new DynaGridworld({ seed: normalizeSeed(seed) + seedIndex });
-      agent.setParams({ ...params, planningSteps: seriesPlanningSteps });
-      successes[0] += Number(agent.evaluatePolicy().success);
-
-      let checkpointIndex = 1;
-      for (let realStep = 1; realStep <= realBudget; realStep += 1) {
-        agent.step();
-        if (realStep === checkpoints[checkpointIndex]) {
-          successes[checkpointIndex] += Number(agent.evaluatePolicy().success);
-          checkpointIndex += 1;
-        }
-      }
-    }
-
-    return {
-      id,
-      label,
-      planningSteps: seriesPlanningSteps,
-      values: successes.map((count) => count * 100 / seeds),
-    };
-  };
-
-  return {
-    checkpoints,
-    series: [
-      runSeries('q-learning', 'Q-learning', 0),
-      runSeries('dyna-q', 'Dyna-Q', dynaPlanningSteps),
-    ],
-    seeds,
-    realBudget,
-  };
 }

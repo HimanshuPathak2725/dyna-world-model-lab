@@ -1,4 +1,27 @@
-export const MISSIONS = [
+import type { SimulationParams } from '../../domain/rl/types.js';
+
+export interface Mission {
+  id: string;
+  number: string;
+  nav: string;
+  title: string;
+  label: string;
+  deck: string;
+  description: string;
+  instruction: string;
+  action: string;
+  params: Partial<SimulationParams>;
+  toast: string;
+}
+
+export interface QuizItem {
+  question: string;
+  options: string[];
+  answer: number;
+  explanation: string;
+}
+
+export const MISSIONS: Mission[] = [
   {
     id: 'interact',
     number: '01',
@@ -53,7 +76,7 @@ export const MISSIONS = [
   },
 ];
 
-export const QUIZ = [
+export const QUIZ: QuizItem[] = [
   {
     question: 'In Dyna-Q, what does one planning step consume?',
     options: ['A new environment transition', 'A previously observed state–action pair', 'A newly rendered observation'],
@@ -77,5 +100,44 @@ export const QUIZ = [
     options: ['The total number of Q-updates', 'The number of real environment steps', 'The final greedy policy'],
     answer: 1,
     explanation: 'Both conditions receive the same real-interaction budget. Dyna-Q performs additional model-based updates on top of that budget.',
+  },
+];
+
+
+export type FoundationTarget = 'state' | 'experiment' | 'comparison';
+
+export interface Foundation {
+  title: string;
+  description: string;
+  formula: string;
+  explanation: string;
+  action: string;
+  target: FoundationTarget;
+}
+
+export const FOUNDATIONS: Foundation[] = [
+  {
+    title: 'A state is an address, not a learned representation.',
+    description: 'Willow Grid has 63 discrete positions. At each position, the agent can choose North, East, South or West. Walls and boundaries can keep it in place.',
+    formula: 's ∈ {0, …, 62}   ·   a ∈ {N, E, S, W}',
+    explanation: 'The agent starts at S46 and the terminal goal is S16. There is no image encoder, embedding or hidden latent state here: the state is directly inspectable.',
+    action: 'Inspect the agent’s state',
+    target: 'state',
+  },
+  {
+    title: 'A reward updates one value at a time.',
+    description: 'Every ordinary move costs −0.04. Reaching the goal returns +1 and ends the episode. Q-learning uses the reward and the best next-state value to update the action just taken.',
+    formula: 'δ = r + γ max Q(s′,·) − Q(s,a)   ·   Q ← Q + αδ',
+    explanation: 'Example: with α = 0.18, a −0.04 reward and zero next-state values, the update is −0.04 × 0.18 = −0.0072. The first experiment shows the real values from your step.',
+    action: 'Take a guided real step',
+    target: 'experiment',
+  },
+  {
+    title: 'The model is memory. Planning is reuse.',
+    description: 'After a real transition, the agent stores its reward, next state and terminal flag under that state–action pair. Planning samples those stored entries for extra Q-updates.',
+    formula: 'M(s,a) = (r, s′, terminal)   ·   (s,a) ∼ M',
+    explanation: 'N = 0 gives Q-learning; N > 0 gives Dyna-Q. This is a transition table, not a neural dynamics model. Planning costs computation, not another environment step, and old entries can become stale when the goal moves.',
+    action: 'Compare Q-learning and Dyna-Q',
+    target: 'comparison',
   },
 ];
