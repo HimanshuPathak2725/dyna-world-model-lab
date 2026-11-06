@@ -1,5 +1,6 @@
 import './home.css';
 import { brandMark, icon } from './icons.js';
+import { createNiaScene } from './nia3d.js';
 
 const pathwayArt = {
   foundations: `<svg viewBox="0 0 220 100" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="2"><rect x="16" y="28" width="42" height="30" rx="5" fill="#f6eddd"/><rect x="88" y="28" width="42" height="30" rx="5" fill="#f6eddd"/><rect x="160" y="28" width="42" height="30" rx="5" fill="#f6eddd"/><path d="m62 43 22 0m18 0h22m18 0h22" stroke="#1aa3a1" stroke-dasharray="4 3"/><circle cx="37" cy="43" r="5" fill="#1aa3a1" stroke="none"/><circle cx="109" cy="43" r="5" fill="#c0652d" stroke="none"/><circle cx="181" cy="43" r="5" fill="#f0a53a" stroke="none"/><path d="M37 70c18 18 55 18 72 0s54-18 72 0" stroke="#18213d" stroke-dasharray="3 4"/></g></svg>`,
@@ -50,7 +51,7 @@ export function renderHomepage() {
           <div class="nia-stage">
             <div class="nia-orbit" aria-hidden="true"></div><div class="nia-grid" aria-hidden="true"></div>
             <div class="guide-badge"><span></span>YOUR DYNA RESEARCH GUIDE</div>
-            <img class="nia-image" src="/nia.svg" alt="Nia, a research guide with dark shoulder-length hair, an ivory jacket and a scientific tablet" width="420" height="560" loading="eager">
+            <div class="nia-image" id="nia-canvas" role="img" aria-label="Nia, a 3D research guide with dark shoulder-length hair, an ivory jacket and a scientific tablet"></div>
             <div class="nia-name"><strong>Nia</strong><span>Research Guide</span></div>
             <div class="guide-dialogue" id="guide-dialogue">
               <span class="dialogue-label">NIA / RESEARCH GUIDE</span>
@@ -58,7 +59,7 @@ export function renderHomepage() {
               <p>We'll explore how intelligent agents learn, predict and plan.</p>
               <p>You can start with a small experiment or discover the research behind these ideas.</p>
               <div class="dialogue-actions"><a href="/lab">Start exploring ${icon('arrowUpRight', 14)}</a><a href="#research">Explore research ${icon('arrowUpRight', 14)}</a></div>
-              <button class="guide-attention" id="guide-attention" type="button" aria-label="Ask Nia to highlight the laboratory"><span></span><span id="nia-status" aria-live="polite">A little guidance, when you need it</span></button>
+              <button class="guide-attention" id="guide-attention" type="button" aria-label="Show a suggestion from Nia"><span></span><span id="nia-status" aria-live="polite">A little guidance, when you need it</span></button>
             </div>
           </div>
         </div>
@@ -90,7 +91,7 @@ export function renderHomepage() {
       </section>
 
       <section class="final-cta section-shell" aria-labelledby="cta-title">
-        <div class="cta-inner reveal"><div><p class="eyebrow">BEGIN WITH A SMALL WORLD</p><h2 id="cta-title">Your first experiment is waiting.</h2><p>Start with a simple world. Discover how an agent learns. Then explore the science behind what happens next.</p><a class="button-primary" href="/lab">Enter DYNA Lab ${icon('arrowUpRight', 16)}</a></div><div class="cta-nia"><img src="/nia.svg" alt="" aria-hidden="true"><span>Nia, your research guide</span></div></div>
+        <div class="cta-inner reveal"><div><p class="eyebrow">BEGIN WITH A SMALL WORLD</p><h2 id="cta-title">Your first experiment is waiting.</h2><p>Start with a simple world. Discover how an agent learns. Then explore the science behind what happens next.</p><a class="button-primary" href="/lab">Enter DYNA Lab ${icon('arrowUpRight', 16)}</a></div></div>
       </section>
     </main>
 
@@ -113,7 +114,12 @@ export function initHomepage() {
   };
   menuToggle.addEventListener('click', () => setMenu(menuToggle.getAttribute('aria-expanded') !== 'true'));
   mobileMenu.querySelectorAll('a').forEach((link) => link.addEventListener('click', () => setMenu(false)));
-  document.addEventListener('keydown', (event) => { if (event.key === 'Escape') setMenu(false); });
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !mobileMenu.hidden) {
+      setMenu(false);
+      menuToggle.focus();
+    }
+  });
   document.addEventListener('click', (event) => {
     if (!mobileMenu.hidden && !mobileMenu.contains(event.target) && !menuToggle.contains(event.target)) setMenu(false);
   });
@@ -123,7 +129,7 @@ export function initHomepage() {
   let attentionTimer;
   document.querySelector('#guide-attention').addEventListener('click', () => {
     guide.classList.add('is-speaking');
-    status.textContent = 'Nia is highlighting the laboratory';
+    status.textContent = 'Try one real step in the lab';
     clearTimeout(attentionTimer);
     attentionTimer = setTimeout(() => {
       guide.classList.remove('is-speaking');
@@ -154,3 +160,12 @@ export function initHomepage() {
 }
 
 initHomepage();
+
+const niaContainer = document.querySelector('#nia-canvas');
+if (niaContainer) {
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  createNiaScene(niaContainer, { reducedMotion }).catch((error) => {
+    console.error(error);
+    niaContainer.innerHTML = '<p class="nia-load-error">Nia / Research Guide</p>';
+  });
+}

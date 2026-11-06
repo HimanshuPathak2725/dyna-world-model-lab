@@ -19,10 +19,6 @@
   </head>
   <body>
     <div id="app"></div>
-    <script type="module">
-      const path = window.location.pathname.replace(/\/+$/, '');
-      if (path === '/lab') import('/src/main.js');
-      else import('/src/home.js');
-    </script>
+    <script type="module" src="/src/router.js"></script>
   </body>
 </html>
